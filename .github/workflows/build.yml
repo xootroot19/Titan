@@ -21,30 +21,14 @@ jobs:
     timeout-minutes: 45
 
     steps:
-
-      # ============================================================
-      # CHECKOUT
-      # ============================================================
-
       - name: Checkout
         uses: actions/checkout@v4
-
-      # ============================================================
-      # JAVA
-      # ============================================================
 
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
-
-      # ============================================================
-      # ANDROID SDK
-      #
-      # packages: '' evita o erro:
-      # Failed to find package 'tools'
-      # ============================================================
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v4
@@ -63,19 +47,9 @@ jobs:
             "ndk;${NDK_VERSION}"
 
           NDK_PATH="$ANDROID_SDK_ROOT/ndk/${NDK_VERSION}"
-
           test -d "$NDK_PATH"
 
           echo "NDK=$NDK_PATH" >> "$GITHUB_ENV"
-
-          echo "=================================="
-          echo "ANDROID SDK OK"
-          echo "NDK: $NDK_PATH"
-          echo "=================================="
-
-      # ============================================================
-      # VERIFY 32 BIT TOOLCHAIN
-      # ============================================================
 
       - name: Verify ARMv7 toolchain
         shell: bash
@@ -83,17 +57,13 @@ jobs:
           set -euxo pipefail
 
           TOOLCHAIN="$NDK/toolchains/llvm/prebuilt/linux-x86_64"
-
           CC="$TOOLCHAIN/bin/armv7a-linux-androideabi${API}-clang"
 
           test -x "$CC"
-
           "$CC" --version
 
-          echo "ARMv7 compiler found."
-
       # ============================================================
-      # GENERATE GAME SOURCE
+      # ENGINE SOURCE
       # ============================================================
 
       - name: Generate Titan Engine
@@ -114,275 +84,149 @@ jobs:
           {
               Vector3 position;
               Vector3 velocity;
-
               float radius;
-              float mass;
-
               bool grounded;
+          } Body;
 
-          } PhysicsBody;
-
-
-          static float ClampDelta(float dt)
+          static float SafeDT(float dt)
           {
               if (dt > 0.033333f)
-                  return 0.033333f;
+                  dt = 0.033333f;
 
               return dt;
           }
 
-
-          static void PhysicsStep(
-              PhysicsBody *body,
-              float dt
-          )
+          static void PhysicsStep(Body *b, float dt)
           {
-              const float gravity = 24.0f;
+              b->velocity.y -= 24.0f * dt;
 
-              body->velocity.y -= gravity * dt;
+              b->position.x += b->velocity.x * dt;
+              b->position.y += b->velocity.y * dt;
+              b->position.z += b->velocity.z * dt;
 
-              body->position.x +=
-                  body->velocity.x * dt;
+              b->grounded = false;
 
-              body->position.y +=
-                  body->velocity.y * dt;
-
-              body->position.z +=
-                  body->velocity.z * dt;
-
-
-              body->grounded = false;
-
-
-              if (body->position.y < body->radius)
+              if (b->position.y < b->radius)
               {
-                  body->position.y = body->radius;
+                  b->position.y = b->radius;
 
-                  if (body->velocity.y < 0.0f)
-                  {
-                      body->velocity.y *= -0.15f;
-                  }
+                  if (b->velocity.y < 0.0f)
+                      b->velocity.y *= -0.12f;
 
-                  if (fabsf(body->velocity.y) < 0.6f)
-                  {
-                      body->velocity.y = 0.0f;
-                  }
+                  if (fabsf(b->velocity.y) < 0.5f)
+                      b->velocity.y = 0.0f;
 
-                  body->velocity.x *= 0.88f;
-                  body->velocity.z *= 0.88f;
+                  b->velocity.x *= 0.88f;
+                  b->velocity.z *= 0.88f;
 
-                  body->grounded = true;
+                  b->grounded = true;
               }
           }
 
-
-          static void DrawRuin(
-              Vector3 position,
-              Vector3 size
-          )
+          static void DrawRuin(Vector3 p, Vector3 size)
           {
-              Color stone =
-              {
-                  103,
-                  105,
-                  94,
-                  255
-              };
+              Color stone = {100, 103, 92, 255};
 
-              DrawCubeV(
-                  position,
-                  size,
-                  stone
-              );
-
+              DrawCubeV(p, size, stone);
               DrawCubeWiresV(
-                  position,
+                  p,
                   size,
-                  Fade(BLACK, 0.20f)
+                  Fade(BLACK, 0.18f)
               );
           }
 
-
-          static void DrawColossus(
-              Vector3 p,
-              float time
-          )
+          static void DrawTitan(Vector3 p, float t)
           {
-              Color stone =
-              {
-                  69,
-                  72,
-                  64,
-                  255
-              };
+              Color body = {72, 75, 65, 255};
+              Color dark = {51, 55, 49, 255};
 
-              Color darkStone =
-              {
-                  53,
-                  57,
-                  52,
-                  255
-              };
-
-
-              float breathe =
-                  sinf(time * 1.2f) * 0.20f;
-
+              float breathing =
+                  sinf(t * 1.1f) * 0.18f;
 
               // legs
-
               DrawCube(
-                  (Vector3)
-                  {
-                      p.x - 2.5f,
-                      p.y + 4.0f,
-                      p.z
-                  },
-                  2.8f,
-                  8.0f,
-                  3.0f,
-                  darkStone
+                  (Vector3){p.x - 2.5f, p.y + 4, p.z},
+                  2.8f, 8.0f, 3.0f,
+                  dark
               );
 
-
               DrawCube(
-                  (Vector3)
-                  {
-                      p.x + 2.5f,
-                      p.y + 4.0f,
-                      p.z
-                  },
-                  2.8f,
-                  8.0f,
-                  3.0f,
-                  darkStone
+                  (Vector3){p.x + 2.5f, p.y + 4, p.z},
+                  2.8f, 8.0f, 3.0f,
+                  dark
               );
 
-
-              // torso
-
-              DrawSphere(
-                  (Vector3)
-                  {
+              // body
+              DrawCube(
+                  (Vector3){
                       p.x,
-                      p.y + 11.0f + breathe,
-                      p.z
-                  },
-                  5.2f,
-                  stone
-              );
-
-
-              DrawCube(
-                  (Vector3)
-                  {
-                      p.x,
-                      p.y + 9.5f,
+                      p.y + 10 + breathing,
                       p.z
                   },
                   8.0f,
-                  8.0f,
+                  9.0f,
                   5.0f,
-                  stone
+                  body
               );
-
 
               // shoulders
-
               DrawSphere(
-                  (Vector3)
-                  {
-                      p.x - 5.0f,
-                      p.y + 11.0f,
-                      p.z
-                  },
-                  2.0f,
-                  stone
+                  (Vector3){p.x - 5, p.y + 12, p.z},
+                  2.2f,
+                  body
               );
 
-
               DrawSphere(
-                  (Vector3)
-                  {
-                      p.x + 5.0f,
-                      p.y + 11.0f,
-                      p.z
-                  },
-                  2.0f,
-                  stone
+                  (Vector3){p.x + 5, p.y + 12, p.z},
+                  2.2f,
+                  body
               );
-
 
               // arms
-
               DrawCube(
-                  (Vector3)
-                  {
-                      p.x - 6.0f,
-                      p.y + 6.5f,
-                      p.z
-                  },
-                  2.5f,
-                  9.0f,
-                  2.5f,
-                  darkStone
+                  (Vector3){p.x - 6, p.y + 7, p.z},
+                  2.4f, 10, 2.4f,
+                  dark
               );
 
-
               DrawCube(
-                  (Vector3)
-                  {
-                      p.x + 6.0f,
-                      p.y + 6.5f,
-                      p.z
-                  },
-                  2.5f,
-                  9.0f,
-                  2.5f,
-                  darkStone
+                  (Vector3){p.x + 6, p.y + 7, p.z},
+                  2.4f, 10, 2.4f,
+                  dark
               );
-
 
               // head
-
               DrawSphere(
-                  (Vector3)
-                  {
+                  (Vector3){
                       p.x,
-                      p.y + 16.0f + breathe,
+                      p.y + 16 + breathing,
                       p.z
                   },
                   2.8f,
-                  darkStone
+                  dark
               );
 
-
-              // glowing eyes
-
+              // eyes
               DrawSphere(
-                  (Vector3)
-                  {
+                  (Vector3){
                       p.x - 0.9f,
-                      p.y + 16.3f + breathe,
+                      p.y + 16.3f + breathing,
                       p.z + 2.4f
                   },
-                  0.20f,
+                  0.22f,
                   GOLD
               );
 
-
               DrawSphere(
-                  (Vector3)
-                  {
+                  (Vector3){
                       p.x + 0.9f,
-                      p.y + 16.3f + breathe,
+                      p.y + 16.3f + breathing,
                       p.z + 2.4f
                   },
-                  0.20f,
+                  0.22f,
                   GOLD
               );
           }
-
 
           int main(void)
           {
@@ -391,204 +235,112 @@ jobs:
                   FLAG_VSYNC_HINT
               );
 
-
               InitWindow(
                   1280,
                   720,
                   "Titan Mobile Engine"
               );
 
-
               SetTargetFPS(60);
 
-
-              PhysicsBody player =
-              {
-                  .position =
-                  {
-                      0.0f,
-                      0.6f,
-                      12.0f
-                  },
-
-                  .velocity =
-                  {
-                      0.0f,
-                      0.0f,
-                      0.0f
-                  },
-
-                  .radius = 0.55f,
-                  .mass = 80.0f,
-                  .grounded = false
+              Body player = {
+                  {0, 0.6f, 12},
+                  {0, 0, 0},
+                  0.55f,
+                  false
               };
 
+              #define ROCKS 48
 
-              #define ROCK_COUNT 40
+              Body debris[ROCKS];
 
-              PhysicsBody rocks[ROCK_COUNT];
-
-
-              for (int i = 0; i < ROCK_COUNT; i++)
+              for (int i = 0; i < ROCKS; i++)
               {
-                  rocks[i].position =
-                  (Vector3)
-                  {
-                      ((float)(i % 8) - 4.0f) * 1.1f,
-
-                      1.0f +
-                      ((float)(i / 8) * 1.0f),
-
-                      -6.0f
+                  debris[i].position = (Vector3){
+                      ((i % 8) - 4) * 1.1f,
+                      1.0f + (i / 8),
+                      -7
                   };
 
+                  debris[i].velocity =
+                      (Vector3){0, 0, 0};
 
-                  rocks[i].velocity =
-                  (Vector3)
-                  {
-                      0.0f,
-                      0.0f,
-                      0.0f
-                  };
-
-
-                  rocks[i].radius = 0.35f;
-                  rocks[i].mass = 10.0f;
-                  rocks[i].grounded = false;
+                  debris[i].radius = 0.35f;
+                  debris[i].grounded = false;
               }
 
-
-              Camera3D camera = { 0 };
-
+              Camera3D camera = {0};
 
               camera.position =
-              (Vector3)
-              {
-                  10.0f,
-                  7.0f,
-                  18.0f
-              };
-
+                  (Vector3){10, 7, 18};
 
               camera.target =
-              (Vector3)
-              {
-                  0.0f,
-                  2.0f,
-                  0.0f
-              };
-
+                  (Vector3){0, 2, 0};
 
               camera.up =
-              (Vector3)
-              {
-                  0.0f,
-                  1.0f,
-                  0.0f
-              };
+                  (Vector3){0, 1, 0};
 
-
-              camera.fovy = 65.0f;
-
+              camera.fovy = 65;
               camera.projection =
                   CAMERA_PERSPECTIVE;
 
-
-              float totalTime = 0.0f;
-
+              float time = 0;
 
               while (!WindowShouldClose())
               {
                   float dt =
-                      ClampDelta(GetFrameTime());
+                      SafeDT(GetFrameTime());
 
+                  time += dt;
 
-                  totalTime += dt;
-
-
-                  // ======================================
-                  // PLAYER
-                  // ======================================
-
-                  Vector3 forward =
-                  {
+                  Vector3 forward = {
                       camera.target.x -
-                      camera.position.x,
+                          camera.position.x,
 
-                      0.0f,
+                      0,
 
                       camera.target.z -
-                      camera.position.z
+                          camera.position.z
                   };
 
-
                   if (Vector3Length(forward) > 0.01f)
-                  {
                       forward =
                           Vector3Normalize(forward);
-                  }
 
-
-                  Vector3 right =
-                  {
+                  Vector3 right = {
                       -forward.z,
-                      0.0f,
+                      0,
                       forward.x
                   };
 
-
-                  Vector3 move =
-                  {
-                      0.0f,
-                      0.0f,
-                      0.0f
-                  };
-
+                  Vector3 move = {0};
 
                   if (IsKeyDown(KEY_W))
                       move =
-                          Vector3Add(
-                              move,
-                              forward
-                          );
-
+                          Vector3Add(move, forward);
 
                   if (IsKeyDown(KEY_S))
                       move =
-                          Vector3Subtract(
-                              move,
-                              forward
-                          );
-
+                          Vector3Subtract(move, forward);
 
                   if (IsKeyDown(KEY_D))
                       move =
-                          Vector3Add(
-                              move,
-                              right
-                          );
-
+                          Vector3Add(move, right);
 
                   if (IsKeyDown(KEY_A))
                       move =
-                          Vector3Subtract(
-                              move,
-                              right
-                          );
-
+                          Vector3Subtract(move, right);
 
                   if (Vector3Length(move) > 0.01f)
                   {
                       move =
                           Vector3Normalize(move);
 
-
                       player.velocity.x =
-                          move.x * 7.0f;
-
+                          move.x * 7;
 
                       player.velocity.z =
-                          move.z * 7.0f;
+                          move.z * 7;
                   }
                   else
                   {
@@ -596,207 +348,101 @@ jobs:
                       player.velocity.z *= 0.82f;
                   }
 
-
                   if (
                       IsKeyPressed(KEY_SPACE) &&
                       player.grounded
                   )
                   {
-                      player.velocity.y = 9.0f;
+                      player.velocity.y = 9;
                   }
 
+                  PhysicsStep(&player, dt);
 
-                  PhysicsStep(
-                      &player,
-                      dt
-                  );
-
-
-                  // ======================================
-                  // DEBRIS PHYSICS
-                  // ======================================
-
-                  for (
-                      int i = 0;
-                      i < ROCK_COUNT;
-                      i++
-                  )
-                  {
+                  for (int i = 0; i < ROCKS; i++)
                       PhysicsStep(
-                          &rocks[i],
+                          &debris[i],
                           dt
                       );
-                  }
 
-
-                  // ======================================
-                  // CAMERA
-                  // ======================================
-
-                  Vector3 target =
-                  {
+                  Vector3 target = {
                       player.position.x,
                       player.position.y + 1.5f,
                       player.position.z
                   };
 
-
-                  Vector3 desiredCamera =
-                  {
-                      player.position.x + 10.0f,
-                      player.position.y + 7.0f,
-                      player.position.z + 15.0f
+                  Vector3 desired = {
+                      player.position.x + 10,
+                      player.position.y + 7,
+                      player.position.z + 15
                   };
-
 
                   camera.target =
                       Vector3Lerp(
                           camera.target,
                           target,
-                          dt * 6.0f
+                          dt * 6
                       );
-
 
                   camera.position =
                       Vector3Lerp(
                           camera.position,
-                          desiredCamera,
-                          dt * 4.0f
+                          desired,
+                          dt * 4
                       );
-
-
-                  // ======================================
-                  // DRAW
-                  // ======================================
 
                   BeginDrawing();
 
-
                   ClearBackground(
-                      (Color)
-                      {
-                          181,
-                          190,
-                          184,
-                          255
-                      }
+                      (Color){181, 190, 184, 255}
                   );
-
 
                   BeginMode3D(camera);
 
-
                   DrawPlane(
-                      (Vector3)
-                      {
-                          0.0f,
-                          0.0f,
-                          0.0f
-                      },
-
-                      (Vector2)
-                      {
-                          140.0f,
-                          140.0f
-                      },
-
-                      (Color)
-                      {
-                          114,
-                          119,
-                          98,
-                          255
-                      }
+                      (Vector3){0, 0, 0},
+                      (Vector2){150, 150},
+                      (Color){113, 118, 97, 255}
                   );
 
-
-                  // ======================================
-                  // MONUMENTAL RUINS
-                  // ======================================
-
-                  for (int i = -6; i <= 6; i++)
+                  // monumental ruins
+                  for (int i = -7; i <= 7; i++)
                   {
-                      float height =
-                          4.0f +
-                          ((float)((i * i) % 4));
-
+                      float h =
+                          4 + ((i * i) % 5);
 
                       DrawRuin(
-                          (Vector3)
-                          {
-                              (float)i * 4.0f,
-                              height * 0.5f,
-                              -15.0f
+                          (Vector3){
+                              i * 4.0f,
+                              h * 0.5f,
+                              -17
                           },
-
-                          (Vector3)
-                          {
-                              1.6f,
-                              height,
-                              1.6f
+                          (Vector3){
+                              1.7f,
+                              h,
+                              1.7f
                           }
                       );
                   }
 
+                  DrawRuin(
+                      (Vector3){-15, 5, -21},
+                      (Vector3){10, 10, 3}
+                  );
 
                   DrawRuin(
-                      (Vector3)
-                      {
-                          -14.0f,
-                          5.0f,
-                          -19.0f
-                      },
-
-                      (Vector3)
-                      {
-                          10.0f,
-                          10.0f,
-                          3.0f
-                      }
+                      (Vector3){15, 4, -21},
+                      (Vector3){9, 8, 3}
                   );
 
-
-                  DrawRuin(
-                      (Vector3)
-                      {
-                          15.0f,
-                          3.5f,
-                          -20.0f
-                      },
-
-                      (Vector3)
-                      {
-                          8.0f,
-                          7.0f,
-                          3.0f
-                      }
+                  DrawTitan(
+                      (Vector3){0, 0, -34},
+                      time
                   );
-
-
-                  // ======================================
-                  // COLOSSUS
-                  // ======================================
-
-                  DrawColossus(
-                      (Vector3)
-                      {
-                          0.0f,
-                          0.0f,
-                          -32.0f
-                      },
-                      totalTime
-                  );
-
-
-                  // ======================================
-                  // PLAYER
-                  // ======================================
 
                   DrawCapsule(
                       player.position,
 
-                      (Vector3)
-                      {
+                      (Vector3){
                           player.position.x,
                           player.position.y + 1.7f,
                           player.position.z
@@ -805,103 +451,66 @@ jobs:
                       0.45f,
                       8,
                       8,
-
-                      (Color)
-                      {
-                          32,
-                          37,
-                          38,
-                          255
-                      }
+                      (Color){31, 36, 37, 255}
                   );
 
-
-                  // ======================================
-                  // PHYSICAL DEBRIS
-                  // ======================================
-
-                  for (
-                      int i = 0;
-                      i < ROCK_COUNT;
-                      i++
-                  )
+                  for (int i = 0; i < ROCKS; i++)
                   {
                       DrawCube(
-                          rocks[i].position,
-
-                          0.70f,
-                          0.70f,
-                          0.70f,
-
-                          (Color)
-                          {
-                              93,
-                              94,
-                              81,
-                              255
-                          }
+                          debris[i].position,
+                          0.7f,
+                          0.7f,
+                          0.7f,
+                          (Color){96, 95, 82, 255}
                       );
                   }
 
-
-                  DrawGrid(
-                      50,
-                      2.0f
-                  );
-
-
                   EndMode3D();
-
-
-                  // ======================================
-                  // DEBUG HUD
-                  // ======================================
 
                   DrawRectangle(
                       14,
                       14,
-                      410,
-                      118,
-                      Fade(BLACK, 0.62f)
+                      430,
+                      125,
+                      Fade(BLACK, 0.60f)
                   );
-
 
                   DrawText(
                       "TITAN MOBILE ENGINE",
-                      28,
-                      26,
-                      24,
+                      27,
+                      25,
+                      25,
                       RAYWHITE
                   );
 
-
                   DrawText(
-                      "ARMv7 / 32-bit / GLES2",
-                      28,
+                      "ARMv7 32-bit / GLES2",
+                      27,
                       58,
                       18,
                       LIGHTGRAY
                   );
 
-
                   DrawText(
-                      "Physics: ON | Colossus: ACTIVE",
-                      28,
+                      "RigidBody: ON",
+                      27,
                       82,
                       17,
                       LIGHTGRAY
                   );
 
-
-                  DrawFPS(
-                      28,
-                      106
+                  DrawText(
+                      "Colossus AI: TEST",
+                      27,
+                      104,
+                      17,
+                      LIGHTGRAY
                   );
 
+                  DrawFPS(330, 104);
 
                   EndDrawing();
               }
-
 
               CloseWindow();
 
@@ -923,10 +532,6 @@ jobs:
             --branch "${RAYLIB_VERSION}" \
             https://github.com/raysan5/raylib.git
 
-      # ============================================================
-      # BUILD RAYLIB ARMv7
-      # ============================================================
-
       - name: Build raylib ARMv7
         shell: bash
         run: |
@@ -945,7 +550,7 @@ jobs:
             RAYLIB_LIBTYPE=STATIC
 
       # ============================================================
-      # BUILD GAME
+      # COMPILE ENGINE
       # ============================================================
 
       - name: Compile Titan ARMv7
@@ -985,7 +590,7 @@ jobs:
             -o apk/lib/armeabi-v7a/libmain.so
 
       # ============================================================
-      # VERIFY 32 BIT
+      # VERIFY REAL 32-BIT ARM
       # ============================================================
 
       - name: Verify ARM 32-bit binary
@@ -995,20 +600,18 @@ jobs:
 
           LIB="apk/lib/armeabi-v7a/libmain.so"
 
-          file "$LIB"
+          test -s "$LIB"
 
+          file "$LIB"
           readelf -h "$LIB"
 
           file "$LIB" | grep "ELF 32-bit"
-
           file "$LIB" | grep "ARM"
 
-          echo "================================="
-          echo "32-BIT ARMv7 VERIFIED"
-          echo "================================="
+          echo "ARMv7 32-bit OK"
 
       # ============================================================
-      # ANDROID MANIFEST
+      # MANIFEST - CORRIGIDO
       # ============================================================
 
       - name: Generate Android package
@@ -1030,7 +633,8 @@ jobs:
           <?xml version="1.0" encoding="utf-8"?>
 
           <manifest
-              xmlns:android="http://schemas.android.com/apk/res/android">
+              xmlns:android="http://schemas.android.com/apk/res/android"
+              package="com.titanmobile.engine">
 
               <uses-sdk
                   android:minSdkVersion="24"
@@ -1041,13 +645,14 @@ jobs:
                   android:required="true" />
 
               <application
-                  android:label="Titan Mobile Engine"
+                  android:label="@string/app_name"
                   android:theme="@android:style/Theme.NoTitleBar.Fullscreen"
-                  android:hasCode="false">
+                  android:hasCode="false"
+                  android:allowBackup="false">
 
                   <activity
                       android:name="android.app.NativeActivity"
-                      android:label="Titan Mobile Engine"
+                      android:label="@string/app_name"
                       android:screenOrientation="landscape"
                       android:configChanges="orientation|keyboardHidden|screenSize"
                       android:exported="true">
@@ -1057,13 +662,11 @@ jobs:
                           android:value="main" />
 
                       <intent-filter>
-
                           <action
                               android:name="android.intent.action.MAIN" />
 
                           <category
                               android:name="android.intent.category.LAUNCHER" />
-
                       </intent-filter>
 
                   </activity>
@@ -1073,8 +676,11 @@ jobs:
           </manifest>
           EOF
 
+          echo "======= MANIFEST ======="
+          cat apk/AndroidManifest.xml
+
       # ============================================================
-      # BUILD APK
+      # CREATE APK
       # ============================================================
 
       - name: Build APK
@@ -1096,18 +702,20 @@ jobs:
             -I "$ANDROID_JAR" \
             -F out/Titan-unsigned.apk
 
-          cd apk
+          (
+            cd apk
 
-          "$BT/aapt" add \
-            ../out/Titan-unsigned.apk \
-            lib/armeabi-v7a/libmain.so
+            "$BT/aapt" add \
+              ../out/Titan-unsigned.apk \
+              lib/armeabi-v7a/libmain.so
+          )
 
-          cd ..
-
-          unzip -l out/Titan-unsigned.apk
+          unzip -l \
+            out/Titan-unsigned.apk \
+            | grep "lib/armeabi-v7a/libmain.so"
 
       # ============================================================
-      # ZIPALIGN
+      # ALIGN
       # ============================================================
 
       - name: Zipalign
@@ -1124,8 +732,14 @@ jobs:
             out/Titan-unsigned.apk \
             out/Titan-aligned.apk
 
+          "$BT/zipalign" \
+            -c \
+            -v \
+            4 \
+            out/Titan-aligned.apk
+
       # ============================================================
-      # SIGN
+      # DEBUG SIGNING KEY
       # ============================================================
 
       - name: Generate signing key
@@ -1143,7 +757,11 @@ jobs:
             -keyalg RSA \
             -keysize 2048 \
             -validity 10000 \
-            -dname "CN=Titan Engine,O=Titan,C=BR"
+            -dname "CN=Titan Mobile Engine,O=Titan,C=BR"
+
+      # ============================================================
+      # SIGN
+      # ============================================================
 
       - name: Sign APK
         shell: bash
@@ -1161,36 +779,41 @@ jobs:
             out/Titan-aligned.apk
 
       # ============================================================
-      # FINAL VALIDATION
+      # FINAL CHECK
       # ============================================================
 
-      - name: Validate APK
+      - name: Validate final APK
         shell: bash
         run: |
           set -euxo pipefail
 
+          APK="out/TitanEngine-ARMv7.apk"
+
           BT="$ANDROID_SDK_ROOT/build-tools/${BUILD_TOOLS}"
+
+          test -s "$APK"
 
           "$BT/apksigner" verify \
             --verbose \
             --print-certs \
-            out/TitanEngine-ARMv7.apk
+            "$APK"
 
-          unzip -l \
-            out/TitanEngine-ARMv7.apk \
+          unzip -l "$APK" \
             | grep "lib/armeabi-v7a/libmain.so"
 
-          test -s \
-            out/TitanEngine-ARMv7.apk
-
           echo ""
-          echo "=================================="
-          echo " TITAN APK GENERATED SUCCESSFULLY"
-          echo " ARMv7 / armeabi-v7a / 32-bit"
-          echo "=================================="
+          echo "======================================"
+          echo " TITAN MOBILE ENGINE"
+          echo " APK GENERATED"
+          echo " ABI: armeabi-v7a"
+          echo " ARCH: ARMv7"
+          echo " BITS: 32"
+          echo "======================================"
+
+          ls -lh "$APK"
 
       # ============================================================
-      # ARTIFACT
+      # DOWNLOADABLE ARTIFACT
       # ============================================================
 
       - name: Upload APK
