@@ -17,3 +17,5 @@ npm run build
 ```
 
 O resultado fica em `dist/`.
+
+> Build trigger: 2026-09-22
